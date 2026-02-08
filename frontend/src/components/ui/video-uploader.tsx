@@ -1,7 +1,7 @@
 "use client";
 
 import { Upload, Video } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 interface VideoUploaderProps {
@@ -15,7 +15,24 @@ export function VideoUploader({ className }: VideoUploaderProps) {
     const [srtTranslated, setSrtTranslated] = useState<string>("");
     const [audioUrl, setAudioUrl] = useState<string>("");
     const [error, setError] = useState<string>("");
+    const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    // Vérifier la connexion au backend au chargement
+    useEffect(() => {
+        const checkHealth = async () => {
+            try {
+                const res = await fetch(`${API_URL}/health`);
+                if (res.ok) setBackendStatus("online");
+                else setBackendStatus("offline");
+            } catch (err) {
+                setBackendStatus("offline");
+            }
+        };
+        checkHealth();
+    }, [API_URL]);
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -28,6 +45,65 @@ export function VideoUploader({ className }: VideoUploaderProps) {
         }
     };
 
+    const downloadAudio = async (fullAudioUrl: string) => {
+        try {
+            const audioResponse = await fetch(fullAudioUrl);
+            const audioBlob = await audioResponse.blob();
+            const audioDownloadUrl = URL.createObjectURL(audioBlob);
+            const audioLink = document.createElement("a");
+            audioLink.href = audioDownloadUrl;
+            audioLink.download = `${selectedFile?.name}_FR.mp3`;
+            document.body.appendChild(audioLink);
+            audioLink.click();
+            document.body.removeChild(audioLink);
+            URL.revokeObjectURL(audioDownloadUrl);
+        } catch (audioErr) {
+            console.error("Erreur téléchargement audio:", audioErr);
+        }
+    };
+
+    const pollAudioStatus = async (jobId: string) => {
+        const maxAttempts = 150; // 5 minutes max (150 * 2s)
+        let attempts = 0;
+
+        const poll = async (): Promise<void> => {
+            try {
+                const response = await fetch(`${API_URL}/api/audio-status/${jobId}`);
+                if (!response.ok) {
+                    console.error("Erreur lors du polling:", response.status);
+                    return;
+                }
+
+                const status = await response.json();
+                console.log(`Job ${jobId}: ${status.status} - ${status.progress}%`);
+
+                if (status.status === "completed" && status.audio_url) {
+                    const fullAudioUrl = `${API_URL}${status.audio_url}`;
+                    setAudioUrl(fullAudioUrl);
+                    await downloadAudio(fullAudioUrl);
+                    setIsProcessing(false);
+                    return;
+                } else if (status.status === "failed") {
+                    setError(`Génération audio échouée: ${status.error || "Erreur inconnue"}`);
+                    setIsProcessing(false);
+                    return;
+                } else if (attempts < maxAttempts) {
+                    attempts++;
+                    setTimeout(poll, 2000); // Poll toutes les 2 secondes
+                } else {
+                    setError("Timeout: La génération audio prend trop de temps");
+                    setIsProcessing(false);
+                }
+            } catch (err) {
+                console.error("Erreur polling:", err);
+                setError("Erreur lors de la vérification du statut audio");
+                setIsProcessing(false);
+            }
+        };
+
+        await poll();
+    };
+
     const handleProcess = async () => {
         if (!selectedFile || isProcessing) return;
 
@@ -37,14 +113,22 @@ export function VideoUploader({ className }: VideoUploaderProps) {
         setSrtTranslated("");
         setAudioUrl("");
 
+
         try {
             const formData = new FormData();
             formData.append("video", selectedFile);
 
-            const response = await fetch("http://localhost:8000/api/transcribe", {
+            // Timeout de 5 minutes pour permettre au TTS de se terminer
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
+            const response = await fetch(`${API_URL}/api/transcribe`, {
                 method: "POST",
                 body: formData,
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -57,28 +141,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                 setSrtOriginal(data.srt_original || "");
                 setSrtTranslated(data.srt_translated || "");
 
-                if (data.audio_url) {
-                    const fullAudioUrl = `http://localhost:8000${data.audio_url}`;
-                    setAudioUrl(fullAudioUrl);
-
-                    // Téléchargement automatique de l'audio MP3
-                    try {
-                        const audioResponse = await fetch(fullAudioUrl);
-                        const audioBlob = await audioResponse.blob();
-                        const audioDownloadUrl = URL.createObjectURL(audioBlob);
-                        const audioLink = document.createElement("a");
-                        audioLink.href = audioDownloadUrl;
-                        audioLink.download = `${selectedFile.name}_FR.mp3`;
-                        document.body.appendChild(audioLink);
-                        audioLink.click();
-                        document.body.removeChild(audioLink);
-                        URL.revokeObjectURL(audioDownloadUrl);
-                    } catch (audioErr) {
-                        console.error("Erreur téléchargement audio:", audioErr);
-                    }
-                }
-
-                // Téléchargement SRT traduit
+                // Téléchargement SRT traduit immédiatement
                 if (data.srt_translated) {
                     const blob = new Blob([data.srt_translated], { type: "application/x-subrip" });
                     const url = URL.createObjectURL(blob);
@@ -89,6 +152,17 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                     link.click();
                     document.body.removeChild(link);
                     URL.revokeObjectURL(url);
+                }
+
+                // Si un job_id est retourné, démarrer le polling pour l'audio
+                if (data.job_id) {
+                    console.log(`Job TTS créé: ${data.job_id}`);
+                    await pollAudioStatus(data.job_id);
+                } else if (data.audio_url) {
+                    // Cas où l'audio est déjà disponible (backward compatibility)
+                    const fullAudioUrl = `${API_URL}${data.audio_url}`;
+                    setAudioUrl(fullAudioUrl);
+                    await downloadAudio(fullAudioUrl);
                 }
             } else {
                 throw new Error("Le traitement a échoué");
@@ -137,6 +211,19 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                     />
 
                     <div className="flex flex-col items-center gap-4">
+                        {/* Indicateur de statut backend */}
+                        <div className="absolute top-4 right-4 flex items-center gap-2">
+                            <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                backendStatus === "online" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" :
+                                    backendStatus === "offline" ? "bg-red-500" : "bg-gray-400 animate-pulse"
+                            )} />
+                            <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                                {backendStatus === "online" ? "Server Online" :
+                                    backendStatus === "offline" ? "Server Offline" : "Checking..."}
+                            </span>
+                        </div>
+
                         {isProcessing ? (
                             <>
                                 <div className="w-16 h-16 bg-blue-500 rounded-sm animate-spin" style={{ animationDuration: "3s" }} />

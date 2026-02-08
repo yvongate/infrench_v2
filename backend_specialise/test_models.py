@@ -130,5 +130,131 @@ Jura, mais un peu tard, qu'on ne l'y prendrait plus."""
             
     await test_model("Zyphra/Zonos-v0.1-transformer", zonos_payload)
 
+async def test_gemini_tts():
+    """Test Gemini TTS avec voix française de qualité (via REST API)"""
+    import requests
+    import base64
+    
+    GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
+    if not GOOGLE_AI_API_KEY:
+        print("Error: GOOGLE_AI_API_KEY not found in .env")
+        return False
+    
+    # Modèle validé
+    model_name = "gemini-2.5-flash-preview-tts"
+    
+    print("\n" + "="*60)
+    print(f"Testing Gemini TTS ({model_name})")
+    print("="*60)
+    
+    test_text_fr = """Maître Corbeau, sur un arbre perché,
+Tenait en son bec un fromage.
+Maître Renard, par l'odeur alléché,
+Lui tint à peu près ce langage :
+Et bonjour, Monsieur du Corbeau."""
+    
+    print(f"Texte à synthétiser: {test_text_fr[:100]}...")
+    print("Génération de l'audio via REST API...")
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GOOGLE_AI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": test_text_fr}]
+        }],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": "Charon" # Voix masculine
+                    }
+                }
+            }
+        }
+    }
+    
+    try:
+        # Note: requests est synchrone, mais pour le test c'est ok. Dans services/tts.py on utilise httpx.
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "candidates" in data and len(data["candidates"]) > 0:
+                parts = data["candidates"][0]["content"]["parts"]
+                for part in parts:
+                    if "inlineData" in part:
+                        audio_data = base64.b64decode(part['inlineData']['data'])
+                        print(f"Audio reçu: {len(audio_data)} bytes")
+                        
+                        # Sauvegarder en RAW (PCM)
+                        raw_file = "test_gemini_tts.raw"
+                        mp3_file = "test_gemini_tts.mp3"
+                        
+                        # Nettoyer avant
+                        if os.path.exists(raw_file): os.remove(raw_file)
+                        if os.path.exists(mp3_file): os.remove(mp3_file)
+                        
+                        with open(raw_file, "wb") as f:
+                            f.write(audio_data)
+                        
+                        print(f"Audio RAW sauvegardé: {os.path.abspath(raw_file)}")
+                        
+                        # Conversion MP3
+                        import subprocess
+                        import time
+                        
+                        # Attendre que le système de fichiers libère le verrou
+                        time.sleep(1.0)
+                        
+                        try:
+                            print(f"Conversion en MP3 vers {os.path.abspath(mp3_file)}...")
+                            
+                            # Conversion PCM s16le 24kHz -> MP3
+                            cmd = [
+                                "ffmpeg", "-y", 
+                                "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", os.path.abspath(raw_file),
+                                "-codec:a", "libmp3lame", "-qscale:a", "2", 
+                                os.path.abspath(mp3_file)
+                            ]
+                            
+                            process = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                            
+                            if os.path.exists(mp3_file) and os.path.getsize(mp3_file) > 0:
+                                print(f"✅ Succès! Audio MP3 sauvegardé: {mp3_file}")
+                                print(f"Taille: {os.path.getsize(mp3_file)} bytes")
+                                
+                                # Nettoyer le RAW
+                                try:
+                                    os.remove(raw_file)
+                                    print("Fichier RAW intermédiaire supprimé.")
+                                except:
+                                    pass
+                            else:
+                                print("❌ Erreur: Le fichier MP3 n'a pas été créé.")
+                                print(process.stderr)
+                                
+                        except subprocess.CalledProcessError as e:
+                            print(f"❌ Erreur conversion MP3 (Code {e.returncode}):")
+                            print(e.stderr)
+                        except Exception as e:
+                            print(f"❌ Erreur conversion MP3: {e}")
+                        
+                        return True
+            print("❌ Erreur: Pas de données audio dans la réponse")
+            print(str(data)[:500])
+            return False
+        else:
+            print(f"❌ Erreur API: {response.status_code}")
+            print(response.text)
+            return False
+            
+    except Exception as e:
+        print(f"❌ Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Test Gemini TTS
+    asyncio.run(test_gemini_tts())
