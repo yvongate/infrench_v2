@@ -27,7 +27,8 @@ AUDIO_OUTPUT_DIR = BASE_DIR / "static" / "audio"
 AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # CORS
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in _origins_raw.split(",") if origin.strip()]
 
 # Upload limits
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
