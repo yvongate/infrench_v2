@@ -22,7 +22,7 @@ export default function Home() {
       <div className="relative z-10 w-full max-w-2xl px-4">
         {/* Conteneur avec effet glassmorphism */}
         <div className="backdrop-blur-xl bg-white/80 dark:bg-black/60 rounded-3xl p-8 shadow-2xl border border-white/20">
-          <VideoUploader processingDuration={3000} />
+          <VideoUploader />
         </div>
       </div>
     </div>
