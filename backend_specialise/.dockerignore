@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Fichiers temporaires
+*.log
+*.tmp
+static/audio/*
+static/video/*
+
+# Env files (configures via Render)
+.env
+.env.local
+
+# Tests
+*.test.py
+tests/

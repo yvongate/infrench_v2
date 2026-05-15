@@ -14,6 +14,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
     const [srtOriginal, setSrtOriginal] = useState<string>("");
     const [srtTranslated, setSrtTranslated] = useState<string>("");
     const [audioUrl, setAudioUrl] = useState<string>("");
+    const [videoUrl, setVideoUrl] = useState<string>("");
     const [error, setError] = useState<string>("");
     const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +42,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
             setSrtOriginal("");
             setSrtTranslated("");
             setAudioUrl("");
+            setVideoUrl("");
             setError("");
         }
     };
@@ -77,10 +79,27 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                 const status = await response.json();
                 console.log(`Job ${jobId}: ${status.status} - ${status.progress}%`);
 
-                if (status.status === "completed" && status.audio_url) {
-                    const fullAudioUrl = `${API_URL}${status.audio_url}`;
-                    setAudioUrl(fullAudioUrl);
-                    await downloadAudio(fullAudioUrl);
+                if (status.status === "completed" && (status.video_url || status.audio_url)) {
+                    // Video doublee disponible
+                    if (status.video_url) {
+                        const fullVideoUrl = `${API_URL}${status.video_url}`;
+                        setVideoUrl(fullVideoUrl);
+                        // Telecharger la video automatiquement
+                        const videoLink = document.createElement("a");
+                        videoLink.href = fullVideoUrl;
+                        videoLink.download = `${selectedFile?.name?.replace(/\.[^/.]+$/, "")}_FR.mp4`;
+                        document.body.appendChild(videoLink);
+                        videoLink.click();
+                        document.body.removeChild(videoLink);
+                    }
+                    // Audio aussi disponible
+                    if (status.audio_url) {
+                        const fullAudioUrl = `${API_URL}${status.audio_url}`;
+                        setAudioUrl(fullAudioUrl);
+                    }
+
+                    // Save video to backend (DISABLED - auth off)
+                    // TODO: Reactiver quand backend_principal tourne
                     setIsProcessing(false);
                     return;
                 } else if (status.status === "failed") {
@@ -112,7 +131,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
         setSrtOriginal("");
         setSrtTranslated("");
         setAudioUrl("");
-
+        setVideoUrl("");
 
         try {
             const formData = new FormData();
@@ -183,6 +202,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
         setSrtOriginal("");
         setSrtTranslated("");
         setAudioUrl("");
+        setVideoUrl("");
         setError("");
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -229,7 +249,7 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                                 <div className="w-16 h-16 bg-blue-500 rounded-sm animate-spin" style={{ animationDuration: "3s" }} />
                                 <p className="text-lg font-medium text-gray-700 dark:text-gray-300">Doublage en cours...</p>
                                 <p className="text-xs text-blue-500 animate-pulse text-center">
-                                    Mistral (Traduction) + Zonos (Voix)
+                                    Mistral (Traduction) + Qwen3-TTS (Voix)
                                 </p>
                             </>
                         ) : selectedFile ? (
@@ -265,24 +285,46 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                 )}
 
                 {/* Résultats */}
-                {audioUrl && (
+                {(videoUrl || audioUrl) && (
                     <div className="w-full max-w-2xl space-y-6">
-                        <div className="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800 shadow-sm">
-                            <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
-                                🔊 Doublage Français (Voix Zonos)
-                            </h3>
-                            <audio controls className="w-full mb-4">
-                                <source src={audioUrl} type="audio/mpeg" />
-                                Votre navigateur ne supporte pas l'élément audio.
-                            </audio>
-                            <a
-                                href={audioUrl}
-                                download={`${selectedFile?.name}_FR.mp3`}
-                                className="text-sm text-blue-600 hover:underline font-medium"
-                            >
-                                Télécharger l'audio seul
-                            </a>
-                        </div>
+                        {/* Video doublee */}
+                        {videoUrl && (
+                            <div className="p-6 bg-purple-50 dark:bg-purple-900/20 rounded-2xl border border-purple-200 dark:border-purple-800 shadow-sm">
+                                <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-300 mb-4 flex items-center gap-2">
+                                    🎬 Video Doublee en Francais
+                                </h3>
+                                <video controls className="w-full mb-4 rounded-lg">
+                                    <source src={videoUrl} type="video/mp4" />
+                                    Votre navigateur ne supporte pas la video.
+                                </video>
+                                <a
+                                    href={videoUrl}
+                                    download={`${selectedFile?.name?.replace(/\.[^/.]+$/, "")}_FR.mp4`}
+                                    className="text-sm text-purple-600 hover:underline font-medium"
+                                >
+                                    Telecharger la video doublee
+                                </a>
+                            </div>
+                        )}
+
+                        {/* Audio seul */}
+                        {audioUrl && (
+                            <div className="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800 shadow-sm">
+                                <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
+                                    🔊 Audio Francais (Qwen3-TTS)
+                                </h3>
+                                <audio controls className="w-full mb-4">
+                                    <source src={audioUrl} type="audio/mpeg" />
+                                </audio>
+                                <a
+                                    href={audioUrl}
+                                    download={`${selectedFile?.name}_FR.mp3`}
+                                    className="text-sm text-blue-600 hover:underline font-medium"
+                                >
+                                    Telecharger l'audio seul
+                                </a>
+                            </div>
+                        )}
 
                         <div className="p-6 bg-green-50 dark:bg-green-950/20 rounded-2xl border border-green-200 dark:border-green-800">
                             <h3 className="text-lg font-semibold text-green-800 dark:text-green-300 mb-3">

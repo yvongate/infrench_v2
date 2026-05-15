@@ -5,3 +5,5 @@ httpx
 python-multipart
 python-dotenv
 
+slowapi
+aiofiles

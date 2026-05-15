@@ -1,0 +1,22 @@
+# Render Blueprint - InFrench Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: infrench-backend
+    runtime: docker
+    region: frankfurt
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DEEPINFRA_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://infrench.vercel.app
+      - key: MAX_FILE_SIZE_MB
+        value: 100
+      - key: RATE_LIMIT_UPLOADS
+        value: 20/hour
+      - key: TEMP_FILE_MAX_AGE_HOURS
+        value: 1
