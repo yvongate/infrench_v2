@@ -56,7 +56,8 @@ def process_and_combine_audio(segments: list, audio_files: list, total_duration:
     if valid_count == 0:
         return ""
 
-    filter_complex = "".join(filter_parts) + f"{''.join(mix_nodes)}amix=inputs={valid_count + 1}:duration=longest[outa]"
+    # amix + volume boost (2.5x) pour compenser le mixage
+    filter_complex = "".join(filter_parts) + f"{''.join(mix_nodes)}amix=inputs={valid_count + 1}:duration=longest,volume=2.5[outa]"
 
     cmd = ["ffmpeg", "-y"] + inputs + [
         "-filter_complex", filter_complex,

@@ -160,20 +160,8 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                 setSrtOriginal(data.srt_original || "");
                 setSrtTranslated(data.srt_translated || "");
 
-                // Téléchargement SRT traduit immédiatement
-                if (data.srt_translated) {
-                    const blob = new Blob([data.srt_translated], { type: "application/x-subrip" });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = `${selectedFile.name}_FR_ADAPT.srt`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                }
-
                 // Si un job_id est retourné, démarrer le polling pour l'audio
+                // Le spinner continue jusqu'à ce que la vidéo soit prête
                 if (data.job_id) {
                     console.log(`Job TTS créé: ${data.job_id}`);
                     await pollAudioStatus(data.job_id);
@@ -181,14 +169,16 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                     // Cas où l'audio est déjà disponible (backward compatibility)
                     const fullAudioUrl = `${API_URL}${data.audio_url}`;
                     setAudioUrl(fullAudioUrl);
-                    await downloadAudio(fullAudioUrl);
+                    setIsProcessing(false);
+                } else {
+                    // Pas de job, pas d'audio - arrêter le spinner
+                    setIsProcessing(false);
                 }
             } else {
                 throw new Error("Le traitement a échoué");
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erreur lors du traitement");
-        } finally {
             setIsProcessing(false);
         }
     };

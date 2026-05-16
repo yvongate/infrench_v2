@@ -48,15 +48,26 @@ def format_to_srt(segments: list, text_key: str = "text") -> str:
 def parse_translated_segments(text: str) -> list:
     """Parse le texte traduit (format [start - end] texte)"""
     segments = []
-    pattern = r"\[(\d+(?:\.\d+)?)\s*s?\s*-\s*(\d+(?:\.\d+)?)\s*s?\]\s*(.+?)(?=\s*\[\s*\d|$)"
+    # Pattern plus robuste qui capture aussi les formats avec virgules
+    pattern = r"\[(\d+(?:[.,]\d+)?)\s*s?\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*s?\]\s*(.+?)(?=\s*\[\s*\d|$)"
     matches = re.findall(pattern, text, re.DOTALL)
-    
-    log_debug(f"PARSING : Trouvé {len(matches)} segments")
-    
-    for start, end, content in matches:
-        segments.append({
-            "start": float(start),
-            "end": float(end),
-            "text": content.strip().replace('\n', ' ')
-        })
+
+    log_debug(f"PARSING : Trouvé {len(matches)} segments dans {len(text)} chars")
+
+    for i, (start, end, content) in enumerate(matches):
+        # Convertir les virgules en points pour les floats
+        start_f = float(start.replace(',', '.'))
+        end_f = float(end.replace(',', '.'))
+        text_clean = content.strip().replace('\n', ' ')
+
+        if text_clean:  # Ne pas ajouter les segments vides
+            segments.append({
+                "start": start_f,
+                "end": end_f,
+                "text": text_clean
+            })
+            log_debug(f"  Segment {i+1}: [{start_f:.2f}-{end_f:.2f}] {text_clean[:50]}...")
+        else:
+            log_debug(f"  Segment {i+1} VIDE ignoré: [{start_f:.2f}-{end_f:.2f}]")
+
     return segments
