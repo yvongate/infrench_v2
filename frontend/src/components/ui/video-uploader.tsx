@@ -258,6 +258,9 @@ export function VideoUploader({ className }: VideoUploaderProps) {
                                     <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
                                         Transcription, Traduction et Voix Synchronisée
                                     </p>
+                                    <p className="text-xs text-orange-500 mt-2">
+                                        ⚠️ Taille max : 100 MB
+                                    </p>
                                 </div>
                             </>
                         )}

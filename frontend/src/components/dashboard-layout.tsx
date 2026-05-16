@@ -2,22 +2,15 @@
 
 import React, { useState } from "react";
 import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
-import {
-    LayoutDashboard,
-    LogOut,
-
-    Home,
-} from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { data: session } = authClient.useSession();
-    const router = useRouter();
 
     const links = [
         {
@@ -29,12 +22,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         },
     ];
     const [open, setOpen] = useState(false);
-
-    const handleLogout = async () => {
-        await authClient.signOut();
-        router.push("/");
-        router.refresh();
-    };
 
     return (
         <div
@@ -57,7 +44,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                         <SidebarLink
                             link={{
                                 label: session?.user?.name || "Utilisateur",
-                                href: "/dashboard", // Redirection vers dashboard car profile supprimé
+                                href: "/dashboard",
                                 icon: (
                                     <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
                                         {session?.user?.name?.charAt(0) || "U"}
@@ -65,17 +52,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                                 ),
                             }}
                         />
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center justify-start gap-2 group/sidebar py-2 w-full"
-                        >
-                            <LogOut className="text-neutral-700 dark:text-neutral-200 h-5 w-5 flex-shrink-0" />
-                            {open && (
-                                <span className="text-neutral-700 dark:text-neutral-200 text-sm group-hover/sidebar:translate-x-1 transition duration-150">
-                                    Déconnexion
-                                </span>
-                            )}
-                        </button>
                     </div>
                 </SidebarBody>
             </Sidebar>
