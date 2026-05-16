@@ -39,14 +39,38 @@ def process_and_combine_audio(segments: list, audio_files: list, total_duration:
 
             duration_actual = float(result.stdout.strip())
 
+            # Calculer le facteur de time-stretch
             factor = duration_actual / duration_target
-            factor = max(0.5, min(2.0, factor))
+
+            # Construire la chaîne atempo (supporte 0.5-2.0 par filtre)
+            # Pour des facteurs extrêmes, on chaîne plusieurs filtres
+            atempo_chain = []
+            remaining_factor = factor
+
+            if remaining_factor < 0.5:
+                # Besoin de ralentir beaucoup (ex: 0.25 = 0.5 * 0.5)
+                while remaining_factor < 0.5:
+                    atempo_chain.append("atempo=0.5")
+                    remaining_factor = remaining_factor / 0.5
+                if 0.5 <= remaining_factor <= 2.0:
+                    atempo_chain.append(f"atempo={remaining_factor:.3f}")
+            elif remaining_factor > 2.0:
+                # Besoin d'accélérer beaucoup (ex: 4.0 = 2.0 * 2.0)
+                while remaining_factor > 2.0:
+                    atempo_chain.append("atempo=2.0")
+                    remaining_factor = remaining_factor / 2.0
+                if 0.5 <= remaining_factor <= 2.0:
+                    atempo_chain.append(f"atempo={remaining_factor:.3f}")
+            else:
+                atempo_chain.append(f"atempo={factor:.3f}")
+
+            atempo_filter = ",".join(atempo_chain) if atempo_chain else "atempo=1.0"
 
             inputs.extend(["-i", audio])
 
             delay_ms = int(start * 1000)
             node_name = f"a{valid_count}"
-            filter_parts.append(f"[{valid_count}:a]atempo={factor},adelay={delay_ms}|{delay_ms}[{node_name}];")
+            filter_parts.append(f"[{valid_count}:a]{atempo_filter},adelay={delay_ms}|{delay_ms}[{node_name}];")
             mix_nodes.append(f"[{node_name}]")
             valid_count += 1
         except Exception as e:
